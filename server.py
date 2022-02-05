@@ -12,6 +12,8 @@ app = Flask(__name__)
 workingDirectory = "/root/"
 
 queue = []
+deleteQueue = []
+uploadFileQueue = []
 
 @app.route('/create-user', methods=['POST'])
 def create_user():
@@ -24,25 +26,34 @@ def create_user():
     )
     return response
 
-
-
-
 @app.route('/delete-user', methods=['POST'])
 def delete_user():
+    global deleteQueue
     username = request.json["username"]
-    users, filetext, startIndex, endIndex = readConfig.get_user_list()
-    newUsers = readConfig.del_user(users, username)
-    readConfig.write_file(newUsers, filetext, startIndex, endIndex)
+    deleteQueue.append(username)
     response = app.response_class(
         status=200,
         mimetype='application/json'
     )
-    command.run_command()
-    os.remove(f"{workingDirectory}algo/configs/178.128.102.222/wireguard/{username}.conf")
-    os.remove(f"{workingDirectory}algo/configs/178.128.102.222/wireguard/{username}.png")
-    os.remove(f"{workingDirectory}algo/configs/178.128.102.222/wireguard/apple/ios/{username}.mobileconfig")
-    os.remove(f"{workingDirectory}algo/configs/178.128.102.222/wireguard/apple/macos/{username}.mobileconfig")
     return response
+
+
+# @app.route('/delete-user', methods=['POST'])
+# def delete_user():
+#     username = request.json["username"]
+#     users, filetext, startIndex, endIndex = readConfig.get_user_list()
+#     newUsers = readConfig.del_user(users, username)
+#     readConfig.write_file(newUsers, filetext, startIndex, endIndex)
+#     response = app.response_class(
+#         status=200,
+#         mimetype='application/json'
+#     )
+#     command.run_command()
+#     os.remove(f"{workingDirectory}algo/configs/178.128.102.222/wireguard/{username}.conf")
+#     os.remove(f"{workingDirectory}algo/configs/178.128.102.222/wireguard/{username}.png")
+#     os.remove(f"{workingDirectory}algo/configs/178.128.102.222/wireguard/apple/ios/{username}.mobileconfig")
+#     os.remove(f"{workingDirectory}algo/configs/178.128.102.222/wireguard/apple/macos/{username}.mobileconfig")
+#     return response
 
 def execute(username):
     print(username)
@@ -53,29 +64,37 @@ def execute(username):
         readConfig.write_file(newUsers, filetext, startIndex, endIndex)
     except Exception:
         print("Drone Exists")
-        response = app.response_class(
-            response=json.dumps({"Error": "Drone Exists"}),
-            status=400,
-            mimetype='application/json'
-        )
-        return response
+        # google_api.uploadFile(username + ".conf")
     else:
-        response = app.response_class(
-            status=200,
-            mimetype='application/json'
-        )
-        command.run_command()
-        google_api.uploadFile(username + ".conf")
-        # root_dir = os.path.dirname(os.getcwd())
-        # directory = f"{workingDirectory}algo/configs/178.128.102.222/wireguard"
-        # filename = username + ".conf"
+        return username
+
+def executeDelete(username):
+    print(username)
+    users, filetext, startIndex, endIndex = readConfig.get_user_list()
+    print(users)
+    newUsers = readConfig.del_user(users, username)
+    readConfig.write_file(newUsers, filetext, startIndex, endIndex)
 
 
 def queueing():
     global queue
+    global deleteQueue
+    global uploadFileQueue
     while True:
-        if(len(queue) > 0):
-            execute(queue.pop(0))
+        change = False
+        while len(queue) > 0:
+            username = execute(queue.pop(0))
+            uploadFileQueue.append(username)
+            change = True
+        while len(deleteQueue) > 0:
+            executeDelete(deleteQueue.pop(0))
+            change = True
+        if change:
+            command.run_command()
+            while len(uploadFileQueue) > 0:
+                google_api.uploadFile(uploadFileQueue.pop(0) + ".conf")
+
+
 
 
 if __name__ == '__main__':
